@@ -141,9 +141,9 @@ def getVSCodeUri (mod : Module) : IO String := do
 /--
 Attempt to determine URI to use for the module source file.
 -/
-def getSrcUri (mod : Module) : IO String := do
+def getSrcUri (mod : Module) (gitHubUrlCached : String) : IO String := do
   match ←IO.getEnv "DOCGEN_SRC" with
-  | .none | .some "github" | .some "" => getGithubUrl mod
+  | .none | .some "github" | .some "" => pure gitHubUrlCached
   | .some "vscode" => getVSCodeUri mod
   | .some "file" => getFileUri mod
   | .some _ => throw <| IO.userError "$DOCGEN_SRC should be github, file, or vscode."
@@ -200,6 +200,20 @@ instance [ToText α] : Lake.ToText (DepSet α) where toText d := Lake.ToText.toT
 
 end DepSet
 
+/--
+Pre-fetch the Github URL of the given module, if applicable.
+This method serves to reduce the number of Git IO operations
+from once per source file to once per module.
+
+Returns:
+- The Github URL of the given module if applicable.
+- Otherwise, an empty string.
+-/
+def preFetchGithubUrl (mod : Module) : IO String := do
+  match ← IO.getEnv "DOCGEN_SRC" with
+  | .none | .some "github" | .some "" => getGithubUrl mod
+  | _  => pure ""
+
 module_facet docs (mod) : DepSet FilePath := do
   let exeJob ← «doc-gen4».fetch
   let bibPrepassJob ← bibPrepass.fetch
@@ -209,12 +223,13 @@ module_facet docs (mod) : DepSet FilePath := do
   let depDocJobs := Job.collectArray <| ← imports.mapM fun mod => fetch <| mod.facet `docs
   let buildDir := (← getRootPackage).buildDir
   let docFile := mod.filePath (buildDir / "doc") "html"
+  let gitHubUrlCached ← preFetchGithubUrl mod
   depDocJobs.bindM fun docDeps => do
     bibPrepassJob.bindM fun _ => do
       exeJob.bindM fun exeFile => do
         modJob.mapM fun _ => do
           buildFileUnlessUpToDate' docFile do
-            let srcUri ← getSrcUri mod
+            let srcUri ← getSrcUri mod gitHubUrlCached
             proc {
               cmd := exeFile.toString
               args := #["single", "--build", buildDir.toString, mod.name.toString, srcUri]
