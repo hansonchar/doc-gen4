@@ -24,9 +24,9 @@ require Cli from git
   "https://github.com/mhuisi/lean4-cli" @ "main"
 
 /--
-Obtain the path to the file that contains the github URL for the given module.
+Obtain the filepath that contains the github URI for the package of the given module.
 -/
-def getGithubUrlCachePath (mod : Module) := s!".lake/githubUrl_{mod.name.toString}.txt"
+def getGithubUriCachePath (mod : Module) := s!".lake/githubUri_{mod.pkg.name.toString}.txt"
 
 /--
 Obtain the subdirectory of the Lean package relative to the root of the enclosing git repository.
@@ -116,7 +116,7 @@ def getGithubBaseUrl (url : String) : Option String :=
   else
     .none
 
-def getGithubUrl (mod : Module) : IO String := do
+def getGithubUri (mod : Module) : IO String := do
   let url ← getGitRemoteUrl mod.pkg.dir "origin"
   let .some baseUrl := getGithubBaseUrl url
       | throw <| IO.userError <|
@@ -126,21 +126,24 @@ def getGithubUrl (mod : Module) : IO String := do
   let srcDir := filteredPath mod.pkg.config.srcDir
   let pkgUri := "/".intercalate <| baseUrl :: "blob" :: commit :: srcDir
   let subdir ← getGitSubDirectory mod.pkg.dir
-  let uri := if subdir = "" then pkgUri else pkgUri ++ "/" ++ subdir
-  return appendLibModPath uri '/' mod
+  pure (if subdir = "" then pkgUri else pkgUri ++ "/" ++ subdir)
 
 /--
-Obtain the github URL via caching on the file system.
+Obtain the github URI for the given module via caching on the file system.
 This is a better performance trade off than forking multiple processes to run the git commands.
 -/
-def getGithubUrlCached (mod : Module) : IO String := do
-  let cachePath := getGithubUrlCachePath mod
+def getGithubUriCached (mod : Module) : IO String := do
+  let cachePath := getGithubUriCachePath mod
   if (← System.FilePath.pathExists cachePath) then
     FS.readFile cachePath
   else
-    let s ← getGithubUrl mod
+    let s ← getGithubUri mod
     FS.writeFile cachePath s
     pure s
+
+def getGithubUrl (mod : Module) : IO String := do
+  let uri ← getGithubUriCached mod
+  return appendLibModPath uri '/' mod
 
 /--
 Return a File uri for the module.
@@ -161,7 +164,7 @@ Attempt to determine URI to use for the module source file.
 -/
 def getSrcUri (mod : Module) : IO String := do
   match ←IO.getEnv "DOCGEN_SRC" with
-  | .none | .some "github" | .some "" => getGithubUrlCached mod
+  | .none | .some "github" | .some "" => getGithubUrl mod
   | .some "vscode" => getVSCodeUri mod
   | .some "file" => getFileUri mod
   | .some _ => throw <| IO.userError "$DOCGEN_SRC should be github, file, or vscode."
