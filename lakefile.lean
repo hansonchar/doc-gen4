@@ -92,36 +92,23 @@ def appendLibModPath (pkgUri : String) (pathSep : Char) (mod : Module) : String 
   appendModPath newBase pathSep mod
 
 /--
-Turns a Github git remote URL into an HTTPS Github URL.
-Three link types from git supported:
-- https://github.com/org/repo
-- https://github.com/org/repo.git
-- git@github.com:org/repo.git
+Quick hack to see the absolute performance.
 -/
-def getGithubBaseUrl (url : String) : Option String :=
-  if url.startsWith "git@github.com:" && url.endsWith ".git" then
-    let url := url.drop "git@github.com:".length
-    let url := url.dropRight ".git".length
-    .some s!"https://github.com/{url}"
-  else if url.startsWith "https://github.com/" then
-    if url.endsWith ".git" then
-      .some <| url.dropRight ".git".length
-    else
-      .some url
-  else
-    .none
+def getGithubUriHardCoded (mod : Module) : IO String := do
+  match mod.pkg.name.toString with
+  | "aesop" => return "https://github.com/leanprover-community/aesop/blob/ddfca7829bf8aa4083cdf9633935dddbb28b7b2a"
+  | "Analysis" => return "https://github.com/hansonchar/analysis/blob/d96deb9d3cddf5bfcd0b6f9d53bd47c52834b337/analysis"
+  | "batteries" => return "https://github.com/leanprover-community/batteries/blob/7a0d63fbf8fd350e891868a06d9927efa545ac1e"
+  | "importGraph" => return "https://github.com/leanprover-community/import-graph/blob/a11bcb5238149ae5d8a0aa5e2f8eddf8a3a9b27d"
+  | "LeanSearchClient" => return "https://github.com/leanprover-community/LeanSearchClient/blob/6c62474116f525d2814f0157bb468bf3a4f9f120"
+  | "mathlib" => return "https://github.com/leanprover-community/mathlib4/blob/c211948581bde9846a99e32d97a03f0d5307c31e"
+  | "plausible" => return "https://github.com/leanprover-community/plausible/blob/2ac43674e92a695e96caac19f4002b25434636da"
+  | "proofwidgets" => return "https://github.com/leanprover-community/ProofWidgets4/blob/21e6a0522cd2ae6cf88e9da99a1dd010408ab306"
+  | "Qq" => return "https://github.com/leanprover-community/quote4/blob/2865ea099ab1dd8d6fc93381d77a4ac87a85527a"
+  | _ => throw <| IO.userError s!"Unknown Github URI for {mod.pkg.name.toString}"
 
 def getGithubUrl (mod : Module) : IO String := do
-  let url ← getGitRemoteUrl mod.pkg.dir "origin"
-  let .some baseUrl := getGithubBaseUrl url
-      | throw <| IO.userError <|
-        s!"Could not interpret Git remote uri {url} as a Github source repo.\n"
-          ++ "See README on source URIs for more details."
-  let commit ← getProjectCommit mod.pkg.dir
-  let srcDir := filteredPath mod.pkg.config.srcDir
-  let pkgUri := "/".intercalate <| baseUrl :: "blob" :: commit :: srcDir
-  let subdir ← getGitSubDirectory mod.pkg.dir
-  let uri := if subdir = "" then pkgUri else pkgUri ++ "/" ++ subdir
+  let uri ← getGithubUriHardCoded mod
   return appendLibModPath uri '/' mod
 
 /--
