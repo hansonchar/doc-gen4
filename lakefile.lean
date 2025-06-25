@@ -1,5 +1,5 @@
 import Lake
-open System Lake DSL
+open System Lake DSL IO
 
 package «doc-gen4»
 
@@ -22,6 +22,9 @@ require «UnicodeBasic» from git
 
 require Cli from git
   "https://github.com/mhuisi/lean4-cli" @ "main"
+
+def githubUrlCachePath := ".lake/githubUrlCached.txt"
+
 
 /--
 Obtain the subdirectory of the Lean package relative to the root of the enclosing git repository.
@@ -125,6 +128,18 @@ def getGithubUrl (mod : Module) : IO String := do
   return appendLibModPath uri '/' mod
 
 /--
+Obtain the github URL via caching on the file system.
+This is a better performance trade off than forking multiple processes to run the git commands.
+-/
+def getGithubUrlCached (mod : Module) : IO String := do
+  if (← System.FilePath.pathExists githubUrlCachePath) then
+    FS.readFile githubUrlCachePath
+  else
+    let s ← getGithubUrl mod
+    FS.writeFile githubUrlCachePath s
+    pure s
+
+/--
 Return a File uri for the module.
 -/
 def getFileUri (mod : Module) : IO String := do
@@ -143,7 +158,7 @@ Attempt to determine URI to use for the module source file.
 -/
 def getSrcUri (mod : Module) : IO String := do
   match ←IO.getEnv "DOCGEN_SRC" with
-  | .none | .some "github" | .some "" => getGithubUrl mod
+  | .none | .some "github" | .some "" => getGithubUrlCached mod
   | .some "vscode" => getVSCodeUri mod
   | .some "file" => getFileUri mod
   | .some _ => throw <| IO.userError "$DOCGEN_SRC should be github, file, or vscode."
