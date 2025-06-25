@@ -23,8 +23,10 @@ require «UnicodeBasic» from git
 require Cli from git
   "https://github.com/mhuisi/lean4-cli" @ "main"
 
-def githubUrlCachePath := ".lake/githubUrlCached.txt"
-
+/--
+Obtain the path to the file that contains the github URL for the given module.
+-/
+def getGithubUrlCachePath (mod : Module) := s!".lake/githubUrl_{mod.name.toString}.txt"
 
 /--
 Obtain the subdirectory of the Lean package relative to the root of the enclosing git repository.
@@ -132,11 +134,12 @@ Obtain the github URL via caching on the file system.
 This is a better performance trade off than forking multiple processes to run the git commands.
 -/
 def getGithubUrlCached (mod : Module) : IO String := do
-  if (← System.FilePath.pathExists githubUrlCachePath) then
-    FS.readFile githubUrlCachePath
+  let cachePath := getGithubUrlCachePath mod
+  if (← System.FilePath.pathExists cachePath) then
+    FS.readFile cachePath
   else
     let s ← getGithubUrl mod
-    FS.writeFile githubUrlCachePath s
+    FS.writeFile cachePath s
     pure s
 
 /--
