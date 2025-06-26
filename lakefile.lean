@@ -28,6 +28,8 @@ Obtain the filepath that contains the github URI for the package of the given mo
 -/
 def getGithubUriCachePath (mod : Module) := s!".lake/githubUri_{mod.pkg.name.toString}.txt"
 
+def toGithubUriKey (mod : Module) := s!"GITHUB_URI_{mod.pkg.name.toString}"
+
 /--
 Obtain the subdirectory of the Lean package relative to the root of the enclosing git repository.
 
@@ -133,6 +135,16 @@ Obtain the github URI for the given module via caching on the file system.
 This is a better performance trade off than forking multiple processes to run the git commands.
 -/
 def getGithubUriCached (mod : Module) : IO String := do
+  let key := toGithubUriKey mod
+  let valopt ← IO.getEnv key
+  let val := match valopt with
+    | none => do
+      let uri ← getGithubUri mod
+      -- IO.setEnv key uri, but Lean4 doesn't currently support IO.setEnv
+      -- TODO: modify Lean4 to support IO.setEnv
+      pure uri
+    | some x => pure x
+
   let cachePath := getGithubUriCachePath mod
   if (← System.FilePath.pathExists cachePath) then
     FS.readFile cachePath
